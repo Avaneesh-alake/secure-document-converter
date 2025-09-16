@@ -1,0 +1,36 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile     # ← Existing FastAPI Dockerfile
+    container_name: sdc-api
+    environment:
+      - API_KEY=supersecret123
+      - LOG_LEVEL=INFO
+      - MAX_UPLOAD_BYTES=26214400   # 25 MB
+    ports:
+      - "8000:8000"
+    networks:
+      - sdcnet
+
+  web:
+    build:
+      context: ./sdc-ui
+      dockerfile: Dockerfile
+    container_name: sdc-web
+    environment:
+      # Frontend talks to the API by service name over the internal network
+      - NEXT_PUBLIC_BACKEND_URL=http://api:8000
+      - NEXT_TELEMETRY_DISABLED=1
+    depends_on:
+      - api
+    ports:
+      - "3000:3000"
+    networks:
+      - sdcnet
+
+networks:
+  sdcnet:
+    driver: bridge

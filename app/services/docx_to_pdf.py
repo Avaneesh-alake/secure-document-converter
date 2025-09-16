@@ -1,0 +1,22 @@
+# app/services/docx_to_pdf.py
+import subprocess
+from pathlib import Path
+
+def docx_to_pdf(input_docx_path: str, output_dir: str) -> str:
+    in_path = Path(input_docx_path)
+    out_path = Path(output_dir) / (in_path.stem + ".pdf")
+
+    # Use LibreOffice headless mode
+    cmd = [
+        "libreoffice",
+        "--headless",
+        "--convert-to", "pdf",
+        "--outdir", str(output_dir),
+        str(in_path)
+    ]
+
+    result = subprocess.run(cmd, capture_output=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"LibreOffice conversion failed: {result.stderr.decode()}")
+
+    return str(out_path)
