@@ -1,0 +1,84 @@
+name: CI-CD
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write  # needed for GHCR
+  id-token: write
+
+env:
+  OWNER: ${{ github.repository_owner }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/secure-doc-converter-api:latest
+            ghcr.io/${{ env.OWNER }}/secure-doc-converter-api:${{ github.sha }}
+
+      - name: Build & push web image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./sdc-ui
+          file: ./sdc-ui/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ env.OWNER }}/secure-doc-converter-web:latest
+            ghcr.io/${{ env.OWNER }}/secure-doc-converter-web:${{ github.sha }}
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: SSH deploy (pull latest images & restart)
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          script: |
+            set -e
+            sudo mkdir -p /opt/sdc
+            sudo chown -R $USER:$USER /opt/sdc
+            cd /opt/sdc
+
+            # Fetch repo (first time) or pull updates
+            if [ ! -d .git ]; then
+              git clone https://github.com/${{ github.repository }} .
+            else
+              git reset --hard
+              git pull --ff-only
+            fi
+
+            # Ensure deploy files exist locally
+            ls deploy/docker-compose.prod.yml deploy/Caddyfile
+
+            # Login to GHCR to pull images
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # .env must already exist on server (contains API_KEY & DOMAIN)
+            docker compose -f deploy/docker-compose.prod.yml pull
+            docker compose -f deploy/docker-compose.prod.yml up -d --remove-orphans
+
+            docker system prune -f

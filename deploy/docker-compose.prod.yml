@@ -1,0 +1,42 @@
+name: sdc
+services:
+  api:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/secure-doc-converter-api:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      LOG_LEVEL: INFO
+      MAX_UPLOAD_BYTES: "26214400"
+    networks: [sdcnet]
+
+  web:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/secure-doc-converter-web:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Caddy will expose https://$DOMAIN; web talks to api through Caddy at /api
+      NEXT_PUBLIC_BACKEND_URL: "https://${DOMAIN}/api"
+      NEXT_TELEMETRY_DISABLED: "1"
+    networks: [sdcnet]
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      DOMAIN: ${DOMAIN}
+    depends_on: [api, web]
+    networks: [sdcnet]
+
+networks:
+  sdcnet:
+
+volumes:
+  caddy_data:
+  caddy_config:
