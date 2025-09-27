@@ -1,42 +1,28 @@
-name: sdc
+version: "3.9"
+
 services:
   api:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/secure-doc-converter-api:latest
-    restart: unless-stopped
-    env_file: .env
+    image: sdc-api:latest
+    container_name: sdc-api
     environment:
-      LOG_LEVEL: INFO
-      MAX_UPLOAD_BYTES: "26214400"
+      - API_KEY=${API_KEY}
+      - LOG_LEVEL=INFO
+      - MAX_UPLOAD_BYTES=26214400
     networks: [sdcnet]
+    restart: unless-stopped
 
   web:
-    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/secure-doc-converter-web:latest
-    restart: unless-stopped
-    env_file: .env
+    image: sdc-web:latest
+    container_name: sdc-web
     environment:
-      # Caddy will expose https://$DOMAIN; web talks to api through Caddy at /api
-      NEXT_PUBLIC_BACKEND_URL: "https://${DOMAIN}/api"
-      NEXT_TELEMETRY_DISABLED: "1"
+      - NEXT_PUBLIC_BACKEND_URL=http://api:8000
+      - NEXT_TELEMETRY_DISABLED=1
+    depends_on: [api]
     networks: [sdcnet]
-
-  caddy:
-    image: caddy:2
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    environment:
-      DOMAIN: ${DOMAIN}
-    depends_on: [api, web]
-    networks: [sdcnet]
+      - "3000:3000"
 
 networks:
   sdcnet:
-
-volumes:
-  caddy_data:
-  caddy_config:
+    driver: bridge
